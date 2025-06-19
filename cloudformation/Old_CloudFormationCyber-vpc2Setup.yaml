@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation cyber-vpc2 setup
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: cyber-vpc2
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.1.0/24
+      AvailabilityZone: eu-central-1a
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: subnet2-a
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.2.0/24
+      AvailabilityZone: eu-central-1b
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: subnet2-b
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow mutual SSH from Subnet_A and Subnet_B
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.10.1.0/24
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.10.2.0/24
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: mutual-SSH-2
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  EC2InstanceNodeA:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      Tags:
+        - Key: Name
+          Value: ec2_NodeA
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref SubnetA
+          AssociatePublicIpAddress: false
+          GroupSet:
+            - !Ref SecurityGroup
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          cat <<CONFIG > /home/ec2-user/.ssh/config
+          Host nodeB
+            HostName ${EC2InstanceNodeB.PrivateIp}
+            User ec2-user
+            IdentityFile /home/ec2-user/cyber-key.pem
+          CONFIG
+
+          chown ec2-user:ec2-user /home/ec2-user/.ssh/config
+          chmod 600 /home/ec2-user/.ssh/config
+
+          cat > /home/ec2-user/cyber-key.pem <<KEY
+          YOUR_PRIVATE_KEY_CONTENT_HERE
+          KEY
+
+          chown ec2-user:ec2-user /home/ec2-user/cyber-key.pem
+          chmod 600 /home/ec2-user/cyber-key.pem
+
+  EC2InstanceNodeB:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      Tags:
+        - Key: Name
+          Value: ec2_NodeB
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref SubnetB
+          AssociatePublicIpAddress: false
+          GroupSet:
+            - !Ref SecurityGroup
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          cat <<CONFIG > /home/ec2-user/.ssh/config
+          Host nodeA
+            HostName ${EC2InstanceNodeA.PrivateIp}
+            User ec2-user
+            IdentityFile /home/ec2-user/cyber-key.pem
+          CONFIG
+
+          chown ec2-user:ec2-user /home/ec2-user/.ssh/config
+          chmod 600 /home/ec2-user/.ssh/config
+
+          cat > /home/ec2-user/cyber-key.pem <<KEY
+          YOUR_PRIVATE_KEY_CONTENT_HERE
+          KEY
+
+          chown ec2-user:ec2-user /home/ec2-user/cyber-key.pem
+          chmod 600 /home/ec2-user/cyber-key.pem
+
+  EC2InstanceConnectEndpoint:
+    Type: AWS::EC2::InstanceConnectEndpoint
+    Properties:
+      SubnetId: !Ref SubnetA
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      PreserveClientIp: false
+      Tags:
+        - Key: Name
+          Value: Endpoint-A2
+
+Outputs:
+  InstanceA:
+    Description: Instance A Private IP
+    Value: !GetAtt EC2InstanceNodeA.PrivateIp
+
+  InstanceB:
+    Description: Instance B Private IP
+    Value: !GetAtt EC2InstanceNodeB.PrivateIp
