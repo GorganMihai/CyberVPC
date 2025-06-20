@@ -139,24 +139,7 @@ Resources:
           chown ec2-user:ec2-user /home/ec2-user/cyber-key.pem
           chmod 600 /home/ec2-user/cyber-key.pem        
         
-  StateBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: cyberbucket2502
-      VersioningConfiguration:
-        Status: Enabled      
-      
-  LockTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: cloudFormation-locks
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: LockID
-          AttributeType: S
-      KeySchema:
-        - AttributeName: LockID
-          KeyType: HASH
+  
 
 Outputs:
   InstanceA:
